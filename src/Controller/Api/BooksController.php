@@ -48,7 +48,7 @@ class BooksController extends AbstractFOSRestController
             $book->setTitle($bookDto->title);
             $em->persist($book);
             $em->flush();
-            return $bookDto;
+            return $book;
         }
         return $form;
     }
