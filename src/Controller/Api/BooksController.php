@@ -4,6 +4,7 @@ namespace App\Controller\Api;
 
 
 use App\Entity\Book;
+use App\Form\Model\BookDto;
 use App\Form\Type\BookFormType;
 use App\Repository\BookRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -36,16 +37,18 @@ class BooksController extends AbstractFOSRestController
         Request $request
     )
     {
-        $book = new Book();
-        $form = $this->createForm(BookFormType::class, $book);
+        $bookDto = new BookDto();
+        $form = $this->createForm(BookFormType::class, $bookDto);
         $form->handleRequest($request);
 
         //Con isSubmitted, la función getName del BookFormType ya nos indica si pasa o no pasa el submit.
-        //Con isValid, si cumple la validación de config/validator/Book.yaml nos devuelve un $book, sino un $form que fos rest bundle es capaz de serializar con el contenido del error.
+        //Con isValid, si cumple la validación de config/validator/BookDto.yaml nos devuelve un $bookDto, sino un $form que fos rest bundle es capaz de serializar con el contenido del error.
         if($form->isSubmitted() && $form->isValid()) {
+            $book = new Book();
+            $book->setTitle($bookDto->title);
             $em->persist($book);
             $em->flush();
-            return $book;
+            return $bookDto;
         }
         return $form;
     }
