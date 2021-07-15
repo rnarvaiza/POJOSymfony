@@ -2,23 +2,12 @@
 
 namespace App\Controller\Api;
 
-use App\Entity\Book;
-use App\Entity\Category;
-use App\Form\Model\BookDto;
-use App\Form\Model\CategoryDto;
-use App\Form\Type\BookFormType;
-use App\Repository\BookRepository;
-use App\Repository\CategoryRepository;
 use App\Service\BookManager;
-use App\Service\FileUploader;
-use Doctrine\Common\Collections\ArrayCollection;
-use Doctrine\ORM\EntityManagerInterface;
 use FOS\RestBundle\Controller\AbstractFOSRestController;
 use FOS\RestBundle\Controller\Annotations as Rest;
 use Symfony\Component\HttpFoundation\Request;
-use League\Flysystem\FilesystemOperator;
 use Symfony\Component\HttpFoundation\Response;
-use FOS\RestBundle\View;
+use FOS\RestBundle\View\View;
 use App\Service\BookFormProcessor;
 
 
@@ -30,12 +19,11 @@ class BooksController extends AbstractFOSRestController
      */
 
     public function getAction(
-        BookRepository $bookRepository
+        BookManager $bookManager
     )
     {
-        return $bookRepository->findAll();
+        return $bookManager->getRepository()->findAll();
     }
-
 
     /**
      * @Rest\Post(path="/books")
@@ -43,33 +31,41 @@ class BooksController extends AbstractFOSRestController
      */
 
     public function postAction(
-        EntityManagerInterface $em,
-        Request $request,
-        FileUploader $fileUploader
+        BookManager $bookManager,
+        BookFormProcessor $bookFormProcessor,
+        Request $request
     )
     {
-        $bookDto = new BookDto();
-        $form = $this->createForm(BookFormType::class, $bookDto);
-        $form->handleRequest($request);
+        $book = $bookManager->create();
+        [$book, $error] = ($bookFormProcessor)($book, $request);
+        $statusCode = $book ? Response::HTTP_CREATED : Response::HTTP_BAD_REQUEST;
+        $data = $book ?? $error;
+        return View::create($data, $statusCode);
+       // return $book ?? $error;
 
-        //Con isSubmitted, la función getName del BookFormType ya nos indica si pasa o no pasa el submit.
-        //Con isValid, si cumple la validación de config/validator/BookDto.yaml nos devuelve un $bookDto, sino un $form que fos rest bundle es capaz de serializar con el contenido del error.
-        if(!$form->isSubmitted()) {
-            return new Response('', Response::HTTP_BAD_REQUEST);
-        }
-        if($form->isValid()){
-            $book = new Book();
-            $book->setTitle($bookDto->title);
+//        $bookDto = new BookDto();
+//        $form = $this->createForm(BookFormType::class, $bookDto);
+//        $form->handleRequest($request);
+//
+//        //Con isSubmitted, la función getName del BookFormType ya nos indica si pasa o no pasa el submit.
+//        //Con isValid, si cumple la validación de config/validator/BookDto.yaml nos devuelve un $bookDto, sino un $form que fos rest bundle es capaz de serializar con el contenido del error.
+//        if(!$form->isSubmitted()) {
+//            return new Response('', Response::HTTP_BAD_REQUEST);
+//        }
+//        if($form->isValid()){
+//            $book = new Book();
+//            $book->setTitle($bookDto->title);
+//
+//            if($bookDto->base64Image){
+//                $filename = $fileUploader->uploadBase64File($bookDto->base64Image);
+//                $book->setImage($filename);
+//            }
+//            $em->persist($book);
+//            $em->flush();
+//            return $book;
+//        }
+//        return $form;
 
-            if($bookDto->base64Image){
-                $filename = $fileUploader->uploadBase64File($bookDto->base64Image);
-                $book->setImage($filename);
-            }
-            $em->persist($book);
-            $em->flush();
-            return $book;
-        }
-        return $form;
     }
 
     /**
@@ -89,7 +85,28 @@ class BooksController extends AbstractFOSRestController
             return View::create('Book not found', Response::HTTP_BAD_REQUEST);
         }
         [$book, $error] = ($bookFormProcessor)($book, $request);
+        $statusCode = $book ? Response::HTTP_CREATED : Response::HTTP_BAD_REQUEST;
+        $data = $book ?? $error;
+        return View::create($data, $statusCode);
+    }
 
-        return $book ?? $error;
+
+    /**
+     * @Rest\Delete(path="/books/{id}", requirements={"id"="\d+"})
+     * @Rest\View(serializerGroups={"book"}, serializerEnableMaxDepthChecks=true)
+     */
+
+    public function deleteAction(
+        int $id,
+        BookManager $bookManager
+    ){
+        $book = $bookManager->find($id);
+        if(!$book){
+            //throw $this->createNotFoundException('Book not found');
+            return View::create('Book not found', Response::HTTP_BAD_REQUEST);
+        }
+        $bookManager->delete($book);
+
+        return View::create('Book deleted', Response::HTTP_NO_CONTENT);
     }
 }

@@ -23,6 +23,11 @@ class CategoryManager
         return $this->categoryRepository->find($id);
     }
 
+    public function getRepository(): CategoryRepository
+    {
+        return $this->categoryRepository;
+    }
+
     public function create(): Category
     {
         $category = new Category();
