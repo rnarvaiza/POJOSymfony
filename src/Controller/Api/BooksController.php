@@ -9,6 +9,7 @@ use App\Form\Model\CategoryDto;
 use App\Form\Type\BookFormType;
 use App\Repository\BookRepository;
 use App\Repository\CategoryRepository;
+use App\Service\BookManager;
 use App\Service\FileUploader;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\ORM\EntityManagerInterface;
@@ -17,6 +18,8 @@ use FOS\RestBundle\Controller\Annotations as Rest;
 use Symfony\Component\HttpFoundation\Request;
 use League\Flysystem\FilesystemOperator;
 use Symfony\Component\HttpFoundation\Response;
+use FOS\RestBundle\View;
+use App\Service\BookFormProcessor;
 
 
 class BooksController extends AbstractFOSRestController
@@ -76,62 +79,17 @@ class BooksController extends AbstractFOSRestController
 
     public function editAction(
         int $id,
-        EntityManagerInterface $em,
-        BookRepository $bookRepository,
-        CategoryRepository $categoryRepository,
-        Request $request,
-        FileUploader $fileUploader
+        BookFormProcessor $bookFormProcessor,
+        BookManager $bookManager,
+        Request $request
     ){
-        $book = $bookRepository->find($id);
+        $book = $bookManager->find($id);
         if(!$book){
-            throw $this->createNotFoundException('Book not found');
+            //throw $this->createNotFoundException('Book not found');
+            return View::create('Book not found', Response::HTTP_BAD_REQUEST);
         }
-        $bookDto = BookDto::createFromBook($book);
+        [$book, $error] = ($bookFormProcessor)($book, $request);
 
-        $originalCategories = new ArrayCollection();
-        foreach ($book->getCategories() as $category){
-            $categoyDto = CategoryDto::createFromCategory($category);
-            $bookDto->categories[] = $categoyDto;
-            $originalCategories->add($categoyDto);
-        }
-        $form = $this->createForm(BookFormType::class, $bookDto);
-        $form->handleRequest($request);
-        if(!$form->isSubmitted()){
-            return new Response('', Response::HTTP_BAD_REQUEST);
-        }
-        if($form->isValid()){
-
-            //remove categories decided by user.
-            foreach($originalCategories as $originalCategoryDto){
-                if(!in_array($originalCategories, $bookDto->categories)){
-                    $category = $categoryRepository->find($originalCategoryDto->id);
-                    $book->removeCategory($category);
-                }
-            }
-
-            //add categories
-
-            foreach($bookDto->categories as $newCategoryDto){
-                if(!$originalCategories->contains($newCategoryDto)){
-                    $category = $categoryRepository->find($newCategoryDto->id ?? 0);
-                    if(!$category){
-                        $category = new Category();
-                        $category->setName($newCategoryDto->name);
-                        $em->persist($category);
-                    }
-                    $book->addCategory($category);
-                }
-            }
-            $book->setTitle($bookDto->title);
-            if($bookDto->base64Image){
-                $filename = $fileUploader->uploadBase64File($bookDto->base64Image);
-                $book->setImage($filename);
-            }
-            $em->persist($book);
-            $em->flush();
-            $em->refresh($book);
-            return $book;
-        }
-        return $form;
+        return $book ?? $error;
     }
 }
